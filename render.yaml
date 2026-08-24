@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: listen-together
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start

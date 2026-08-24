@@ -1,0 +1,16 @@
+{
+  "name": "youtube-listen-together",
+  "version": "1.0.0",
+  "description": "Sluchaj muzyki na YouTube razem ze znajomymi, zsynchronizowane w czasie rzeczywistym.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

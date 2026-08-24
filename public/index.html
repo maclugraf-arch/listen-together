@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Słuchaj razem</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="join-screen" class="screen">
+  <div class="card">
+    <h1>🎧 Słuchaj razem</h1>
+    <p class="subtitle">Otwórz jeden pokój z znajomymi i słuchajcie muzyki z YouTube dokładnie w tym samym momencie.</p>
+    <label for="room-input">Kod pokoju</label>
+    <input id="room-input" type="text" placeholder="np. ABC123" maxlength="12" autocomplete="off" />
+    <div class="button-row">
+      <button id="join-btn" class="primary">Dołącz</button>
+      <button id="create-btn" class="secondary">Utwórz nowy pokój</button>
+    </div>
+  </div>
+</div>
+
+<div id="room-screen" class="screen hidden">
+  <header class="topbar">
+    <div class="room-info">
+      <span class="room-label">Pokój</span>
+      <span id="room-code" class="room-code"></span>
+      <button id="copy-link" title="Skopiuj link do pokoju">Skopiuj link</button>
+    </div>
+    <div class="members" id="member-text">1 osoba w pokoju</div>
+  </header>
+
+  <main class="main">
+    <div class="video-wrap">
+      <div id="player"></div>
+      <div id="no-video" class="no-video">
+        <p>Wklej link do filmu na YouTube poniżej, aby zacząć.</p>
+      </div>
+    </div>
+
+    <div class="load-row">
+      <input id="video-input" type="text" placeholder="Wklej link do YouTube (lub sam ID filmu)" autocomplete="off" />
+      <button id="load-btn" class="primary">Odtwórz</button>
+    </div>
+
+    <p id="status" class="status"></p>
+  </main>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
