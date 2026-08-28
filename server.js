@@ -156,39 +156,99 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// BetterTTV's global emote list is public and unauthenticated — this hotlinks
-// straight to their CDN (cdn.betterttv.net) rather than copying any emote
-// artwork into this app, the same way any BTTV-aware chat client does.
-const BTTV_CACHE_TTL = 6 * 60 * 60 * 1000;
-const SHORTCODE_RE = /^[a-z0-9+]+$/;
-let bttvCache = null;
-let bttvCachedAt = 0;
+// Emotes are hotlinked straight to BetterTTV's and 7TV's own public CDNs
+// (cdn.betterttv.net, cdn.7tv.app) rather than copied into this app — both
+// services expose unauthenticated, no-key-needed read APIs meant for exactly
+// this kind of third-party embedding.
+const EMOTE_CACHE_TTL = 6 * 60 * 60 * 1000;
+const SHORTCODE_RE = /^[a-z0-9_+-]+$/;
+const CHANNEL_TWITCH_ID = '123180725'; // rybsonlol_
 
-async function getBttvEmotes() {
-  if (bttvCache && Date.now() - bttvCachedAt < BTTV_CACHE_TTL) {
-    return bttvCache;
-  }
+async function getBttvGlobalEmotes() {
   try {
     const res = await fetch('https://api.betterttv.net/3/cached/emotes/global');
-    if (!res.ok) throw new Error(`bttv status ${res.status}`);
+    if (!res.ok) throw new Error(`bttv global status ${res.status}`);
     const data = await res.json();
-    const emotes = data
+    return data
       .filter((e) => SHORTCODE_RE.test(e.code.toLowerCase()))
       .map((e) => ({
         code: e.code.toLowerCase(),
         url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
         animated: !!e.animated,
       }));
-    bttvCache = emotes;
-    bttvCachedAt = Date.now();
   } catch (e) {
-    console.error('BetterTTV fetch failed:', e.message);
+    console.error('BetterTTV global fetch failed:', e.message);
+    return [];
   }
-  return bttvCache || [];
+}
+
+async function getBttvChannelEmotes(twitchId) {
+  try {
+    const res = await fetch(`https://api.betterttv.net/3/cached/users/twitch/${twitchId}`);
+    if (!res.ok) throw new Error(`bttv channel status ${res.status}`);
+    const data = await res.json();
+    const all = [...(data.channelEmotes || []), ...(data.sharedEmotes || [])];
+    return all
+      .filter((e) => SHORTCODE_RE.test(e.code.toLowerCase()))
+      .map((e) => ({
+        code: e.code.toLowerCase(),
+        url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
+        animated: !!e.animated,
+      }));
+  } catch (e) {
+    console.error('BetterTTV channel fetch failed:', e.message);
+    return [];
+  }
+}
+
+async function getSevenTvChannelEmotes(twitchId) {
+  try {
+    const res = await fetch(`https://7tv.io/v3/users/twitch/${twitchId}`);
+    if (!res.ok) throw new Error(`7tv status ${res.status}`);
+    const data = await res.json();
+    const emotes = (data.emote_set && data.emote_set.emotes) || [];
+    return emotes
+      .filter((e) => SHORTCODE_RE.test(e.name.toLowerCase()))
+      .map((e) => {
+        const files = e.data && e.data.host && e.data.host.files ? e.data.host.files : [];
+        const pick = files.find((f) => f.name === '2x.webp') || files.find((f) => f.name.endsWith('.webp')) || files[0];
+        if (!pick) return null;
+        return {
+          code: e.name.toLowerCase(),
+          url: `https:${e.data.host.url}/${pick.name}`,
+          animated: !!e.data.animated,
+        };
+      })
+      .filter(Boolean);
+  } catch (e) {
+    console.error('7TV channel fetch failed:', e.message);
+    return [];
+  }
+}
+
+let emoteCache = null;
+let emoteCachedAt = 0;
+
+async function getAllEmotes() {
+  if (emoteCache && Date.now() - emoteCachedAt < EMOTE_CACHE_TTL) {
+    return emoteCache;
+  }
+  const [global, channelBttv, channel7tv] = await Promise.all([
+    getBttvGlobalEmotes(),
+    getBttvChannelEmotes(CHANNEL_TWITCH_ID),
+    getSevenTvChannelEmotes(CHANNEL_TWITCH_ID),
+  ]);
+  // 7TV listed last so it wins on a code collision with the channel's BTTV set.
+  const channelMap = new Map();
+  [...channelBttv, ...channel7tv].forEach((e) => channelMap.set(e.code, e));
+
+  emoteCache = { global, channel: Array.from(channelMap.values()) };
+  emoteCachedAt = Date.now();
+  return emoteCache;
 }
 
 app.get('/api/emotes', async (req, res) => {
-  res.json({ emotes: await getBttvEmotes() });
+  res.json(await getAllEmotes());
 });
 
 const httpServer = app.listen(PORT, () => {
@@ -196,7 +256,7 @@ const httpServer = app.listen(PORT, () => {
   if (!YT_API_KEY) {
     console.log('YOUTUBE_API_KEY not set — automatic replacement and suggestions are disabled.');
   }
-  getBttvEmotes(); // warm the cache so the first chat user isn't stuck waiting
+  getAllEmotes(); // warm the cache so the first chat user isn't stuck waiting
 });
 
 const io = new Server(httpServer);

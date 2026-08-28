@@ -61,7 +61,10 @@
         <button id="color-btn" class="ghost">🎨 Kolor nicku</button>
       </div>
       <div id="chat-messages" class="chat-messages"></div>
-      <div id="emote-picker" class="emote-picker hidden"></div>
+      <div id="emote-picker" class="emote-picker hidden">
+        <input id="emote-search" type="text" class="emote-search hidden" placeholder="Szukaj w emotkach kanału..." autocomplete="off" />
+        <div id="emote-search-results" class="emote-search-results"></div>
+      </div>
       <div class="chat-input-row">
         <button id="emote-btn" class="ghost" type="button" title="Emotki">😊</button>
         <input id="chat-input" type="text" placeholder="Napisz coś... (np. :fire:)" maxlength="500" autocomplete="off" />

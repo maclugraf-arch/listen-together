@@ -35,6 +35,8 @@
   const qrCloseBtn = document.getElementById('qr-close-btn');
   const emoteBtn = document.getElementById('emote-btn');
   const emotePicker = document.getElementById('emote-picker');
+  const emoteSearchInput = document.getElementById('emote-search');
+  const emoteSearchResultsEl = document.getElementById('emote-search-results');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
@@ -217,7 +219,7 @@
     cry: '😭', think: '🤔', party: '🎉', wave: '👋', gg: '🏆',
     poggers: '🎉', salty: '🧂', peepo: '🐸', chad: '💪', ez: '😴',
   };
-  const EMOTE_RE = /:([a-z0-9+]{2,20}):/gi;
+  const EMOTE_RE = /:([a-z0-9_+-]{2,30}):/gi;
 
   // Real BetterTTV emotes, fetched from /api/emotes (server hotlinks their
   // public CDN) and merged into the same :code: lookup as the built-in emoji.
@@ -268,7 +270,16 @@
     chatInput.setSelectionRange(pos, pos);
   }
 
-  function addPickerButton(code, glyphEl) {
+  function makeImageGlyph(url, code) {
+    const img = document.createElement('img');
+    img.className = 'glyph-img';
+    img.src = url;
+    img.alt = code;
+    img.loading = 'lazy';
+    return img;
+  }
+
+  function addPickerButton(code, glyphEl, container) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'emote-picker-item';
@@ -281,7 +292,7 @@
     btn.appendChild(label);
 
     btn.addEventListener('click', () => insertEmoteCode(code));
-    emotePicker.appendChild(btn);
+    (container || emotePicker).appendChild(btn);
   }
 
   function buildEmotePicker() {
@@ -294,33 +305,57 @@
   }
   buildEmotePicker();
 
+  // Emotes from the configured channel (hundreds, via BTTV + 7TV) aren't all
+  // rendered into the picker up front — only made searchable — to keep the
+  // grid from turning into a scroll of a thousand tiny buttons.
+  let channelEmoteList = [];
+
   async function loadBttvEmotes() {
     try {
       const res = await fetch('/api/emotes');
       if (!res.ok) return;
       const data = await res.json();
-      const list = data.emotes || [];
-      if (!list.length) return;
+      const global = data.global || [];
+      const channel = data.channel || [];
 
-      const divider = document.createElement('div');
-      divider.className = 'emote-picker-divider';
-      divider.textContent = 'BetterTTV';
-      emotePicker.appendChild(divider);
+      if (global.length) {
+        const divider = document.createElement('div');
+        divider.className = 'emote-picker-divider';
+        divider.textContent = 'BetterTTV';
+        emotePicker.appendChild(divider);
 
-      list.forEach((e) => {
-        imageEmotes[e.code] = { url: e.url, animated: e.animated };
-        const glyph = document.createElement('img');
-        glyph.className = 'glyph-img';
-        glyph.src = e.url;
-        glyph.alt = e.code;
-        glyph.loading = 'lazy';
-        addPickerButton(e.code, glyph);
-      });
+        global.forEach((e) => {
+          imageEmotes[e.code] = { url: e.url, animated: e.animated };
+          addPickerButton(e.code, makeImageGlyph(e.url, e.code));
+        });
+      }
+
+      // Channel entries override global ones on a code collision — more
+      // relevant to the room than a generic global emote of the same name.
+      channel.forEach((e) => { imageEmotes[e.code] = { url: e.url, animated: e.animated }; });
+      channelEmoteList = channel;
+      if (channel.length) {
+        emoteSearchInput.classList.remove('hidden');
+      }
     } catch (e) {
       // fine — chat still works with the built-in emoji set
     }
   }
   loadBttvEmotes();
+
+  let emoteSearchDebounce = null;
+  emoteSearchInput.addEventListener('input', () => {
+    clearTimeout(emoteSearchDebounce);
+    emoteSearchDebounce = setTimeout(() => {
+      const q = emoteSearchInput.value.trim().toLowerCase();
+      emoteSearchResultsEl.innerHTML = '';
+      if (q.length < 2) return;
+      channelEmoteList
+        .filter((e) => e.code.includes(q))
+        .slice(0, 48)
+        .forEach((e) => addPickerButton(e.code, makeImageGlyph(e.url, e.code), emoteSearchResultsEl));
+    }, 150);
+  });
 
   emoteBtn.addEventListener('click', () => {
     emotePicker.classList.toggle('hidden');
