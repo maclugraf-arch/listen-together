@@ -334,6 +334,68 @@ button.ghost:hover { background: var(--panel-alt); }
   padding: 12px 22px;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.modal-card h3 {
+  margin: 0 0 20px;
+  font-size: 17px;
+}
+
+.color-wheel-wrap {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+}
+
+#color-wheel {
+  border-radius: 50%;
+  cursor: crosshair;
+  display: block;
+  touch-action: none;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.color-wheel-cursor {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.color-preview-name {
+  margin-top: 18px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-card .button-row {
+  margin-top: 22px;
+}
+
 @media (max-width: 600px) {
   .card { padding: 28px 20px; }
   .load-row { flex-direction: column; }

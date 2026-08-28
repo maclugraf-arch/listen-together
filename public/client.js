@@ -19,10 +19,22 @@
   const chatMessagesEl = document.getElementById('chat-messages');
   const chatInput = document.getElementById('chat-input');
   const chatSendBtn = document.getElementById('chat-send-btn');
+  const colorBtn = document.getElementById('color-btn');
+  const colorModal = document.getElementById('color-modal');
+  const colorWheelCanvas = document.getElementById('color-wheel');
+  const colorWheelCursor = document.getElementById('color-wheel-cursor');
+  const colorPreviewName = document.getElementById('color-preview-name');
+  const colorSaveBtn = document.getElementById('color-save-btn');
+  const colorCancelBtn = document.getElementById('color-cancel-btn');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
-  try { nameInput.value = localStorage.getItem('lt_name') || ''; } catch (e) { /* no storage access */ }
+  const DEFAULT_NAME_COLOR = '#ff3b3b';
+  let myColor = DEFAULT_NAME_COLOR;
+  try {
+    nameInput.value = localStorage.getItem('lt_name') || '';
+    myColor = localStorage.getItem('lt_color') || DEFAULT_NAME_COLOR;
+  } catch (e) { /* no storage access */ }
 
   const socket = io();
 
@@ -126,6 +138,7 @@
     div.className = 'chat-msg';
     const nameSpan = document.createElement('span');
     nameSpan.className = 'chat-name';
+    nameSpan.style.color = msg.color || DEFAULT_NAME_COLOR;
     nameSpan.textContent = msg.name + ': ';
     const textSpan = document.createElement('span');
     textSpan.textContent = msg.text;
@@ -149,6 +162,146 @@
 
   chatSendBtn.addEventListener('click', sendChat);
   chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+  // --- Nickname color wheel (HSV: angle = hue, radius = saturation, fixed value) ---
+
+  function hsvToRgb(h, s, v) {
+    const c = v * s;
+    const hh = h / 60;
+    const x = c * (1 - Math.abs((hh % 2) - 1));
+    let r = 0, g = 0, b = 0;
+    if (hh < 1) { r = c; g = x; }
+    else if (hh < 2) { r = x; g = c; }
+    else if (hh < 3) { g = c; b = x; }
+    else if (hh < 4) { g = x; b = c; }
+    else if (hh < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    const m = v - c;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    const s = max === 0 ? 0 : d / max;
+    return [h, s, max];
+  }
+
+  let pendingColor = myColor;
+  const wheelRadius = colorWheelCanvas.width / 2;
+
+  function drawColorWheel() {
+    const ctx = colorWheelCanvas.getContext('2d');
+    const size = colorWheelCanvas.width;
+    const img = ctx.createImageData(size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = x - wheelRadius;
+        const dy = y - wheelRadius;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        const idx = (y * size + x) * 4;
+        if (r <= wheelRadius) {
+          let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+          if (angle < 0) angle += 360;
+          const sat = Math.min(r / wheelRadius, 1);
+          const [rr, gg, bb] = hsvToRgb(angle, sat, 0.95);
+          img.data[idx] = rr; img.data[idx + 1] = gg; img.data[idx + 2] = bb; img.data[idx + 3] = 255;
+        } else {
+          img.data[idx + 3] = 0;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function setCursorForColor(hex) {
+    const [r, g, b] = hexToRgb(hex);
+    const [h, s] = rgbToHsv(r, g, b);
+    const angleRad = (h * Math.PI) / 180;
+    const dist = Math.min(s, 1) * wheelRadius;
+    const x = wheelRadius + Math.cos(angleRad) * dist;
+    const y = wheelRadius + Math.sin(angleRad) * dist;
+    colorWheelCursor.style.left = `${x}px`;
+    colorWheelCursor.style.top = `${y}px`;
+  }
+
+  function updateColorPreview() {
+    colorPreviewName.style.color = pendingColor;
+    colorPreviewName.textContent = nameInput.value.trim() || 'Twoja nazwa';
+    setCursorForColor(pendingColor);
+  }
+
+  function pickColorAt(clientX, clientY) {
+    const rect = colorWheelCanvas.getBoundingClientRect();
+    const scaleX = colorWheelCanvas.width / rect.width;
+    const scaleY = colorWheelCanvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    const dx = x - wheelRadius;
+    const dy = y - wheelRadius;
+    const r = Math.sqrt(dx * dx + dy * dy);
+    if (r > wheelRadius) return;
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+    const sat = Math.min(r / wheelRadius, 1);
+    const [rr, gg, bb] = hsvToRgb(angle, sat, 0.95);
+    pendingColor = rgbToHex(rr, gg, bb);
+    updateColorPreview();
+  }
+
+  let draggingWheel = false;
+  colorWheelCanvas.addEventListener('mousedown', (e) => { draggingWheel = true; pickColorAt(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', (e) => { if (draggingWheel) pickColorAt(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { draggingWheel = false; });
+  colorWheelCanvas.addEventListener('touchstart', (e) => {
+    draggingWheel = true;
+    const t = e.touches[0];
+    pickColorAt(t.clientX, t.clientY);
+  }, { passive: true });
+  colorWheelCanvas.addEventListener('touchmove', (e) => {
+    if (!draggingWheel) return;
+    const t = e.touches[0];
+    pickColorAt(t.clientX, t.clientY);
+  }, { passive: true });
+  window.addEventListener('touchend', () => { draggingWheel = false; });
+
+  colorBtn.addEventListener('click', () => {
+    pendingColor = myColor;
+    drawColorWheel();
+    updateColorPreview();
+    colorModal.classList.remove('hidden');
+  });
+
+  colorCancelBtn.addEventListener('click', () => { colorModal.classList.add('hidden'); });
+
+  colorSaveBtn.addEventListener('click', () => {
+    myColor = pendingColor;
+    try { localStorage.setItem('lt_color', myColor); } catch (e) { /* no storage access */ }
+    socket.emit('set-color', { color: myColor });
+    colorModal.classList.add('hidden');
+    setStatus('Kolor nicku zapisany!');
+  });
+
+  colorModal.addEventListener('click', (e) => {
+    if (e.target === colorModal) colorModal.classList.add('hidden');
+  });
 
   async function loadSuggestions(videoId) {
     try {
@@ -202,7 +355,7 @@
     const name = nameInput.value.trim();
     try { if (name) localStorage.setItem('lt_name', name); } catch (e) { /* no storage access */ }
 
-    socket.emit('join-room', { code, name });
+    socket.emit('join-room', { code, name, color: myColor });
   }
 
   joinBtn.addEventListener('click', () => goToRoom(roomInput.value || randomCode()));

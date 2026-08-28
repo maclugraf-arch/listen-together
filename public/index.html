@@ -51,7 +51,10 @@
     <p id="status" class="status"></p>
 
     <section class="panel">
-      <h2>Czat</h2>
+      <div class="panel-header">
+        <h2>Czat</h2>
+        <button id="color-btn" class="ghost">🎨 Kolor nicku</button>
+      </div>
       <div id="chat-messages" class="chat-messages"></div>
       <div class="chat-input-row">
         <input id="chat-input" type="text" placeholder="Napisz coś..." maxlength="500" autocomplete="off" />
@@ -77,6 +80,21 @@
       <div id="suggestions-list" class="thumb-list"></div>
     </section>
   </main>
+</div>
+
+<div id="color-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>Wybierz kolor nicku</h3>
+    <div class="color-wheel-wrap">
+      <canvas id="color-wheel" width="220" height="220"></canvas>
+      <div id="color-wheel-cursor" class="color-wheel-cursor"></div>
+    </div>
+    <div id="color-preview-name" class="color-preview-name">Twoja nazwa</div>
+    <div class="button-row">
+      <button id="color-cancel-btn" class="secondary">Anuluj</button>
+      <button id="color-save-btn" class="primary">Zapisz</button>
+    </div>
+  </div>
 </div>
 
 <script src="https://www.youtube.com/iframe_api"></script>

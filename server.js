@@ -159,9 +159,12 @@ function fullState(code) {
   };
 }
 
-function postChatMessage(code, name, text) {
+const DEFAULT_NAME_COLOR = '#ff3b3b';
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+function postChatMessage(code, name, text, color) {
   const state = getRoom(code);
-  const msg = { name, text, ts: Date.now() };
+  const msg = { name, text, ts: Date.now(), color: color || DEFAULT_NAME_COLOR };
   state.messages.push(msg);
   state.messages = state.messages.slice(-50);
   io.to(code).emit('chat-message', msg);
@@ -171,6 +174,7 @@ io.on('connection', (socket) => {
   let joinedRoom = null;
 
   let displayName = 'Gość';
+  let displayColor = DEFAULT_NAME_COLOR;
 
   socket.on('join-room', (payload) => {
     const code = payload && typeof payload.code === 'string' ? payload.code.trim().toUpperCase() : null;
@@ -178,6 +182,9 @@ io.on('connection', (socket) => {
 
     const rawName = payload && typeof payload.name === 'string' ? payload.name.trim() : '';
     displayName = rawName ? rawName.slice(0, 24) : `Gość${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const rawColor = payload && typeof payload.color === 'string' ? payload.color.trim() : '';
+    displayColor = HEX_COLOR_RE.test(rawColor) ? rawColor : DEFAULT_NAME_COLOR;
 
     joinedRoom = code;
     socket.join(code);
@@ -188,12 +195,17 @@ io.on('connection', (socket) => {
     io.to(code).emit('members', roomSize(code));
   });
 
+  socket.on('set-color', (payload) => {
+    const color = payload && typeof payload.color === 'string' ? payload.color.trim() : '';
+    if (HEX_COLOR_RE.test(color)) displayColor = color;
+  });
+
   socket.on('chat-message', (payload) => {
     if (!joinedRoom) return;
     const text = payload && typeof payload.text === 'string' ? payload.text.trim().slice(0, 500) : '';
     if (!text) return;
 
-    postChatMessage(joinedRoom, displayName, text);
+    postChatMessage(joinedRoom, displayName, text, displayColor);
   });
 
   socket.on('update', (payload) => {
