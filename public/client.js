@@ -21,6 +21,7 @@
   let driftTimer = null;
   let expected = 0;
   let lastLoadedId = null;
+  let playerBroken = false;
   const attemptedReplacement = new Set();
 
   function setStatus(msg) {
@@ -108,6 +109,25 @@
     driftTimer = null;
   }
 
+  // The YouTube iframe stops responding to loadVideoById() once it has hit
+  // an embedding-disallowed error, so a replacement needs a fresh player
+  // instance rather than reloading the broken one.
+  function ensurePlayerContainer() {
+    if (document.getElementById('player')) return;
+    const div = document.createElement('div');
+    div.id = 'player';
+    noVideoEl.parentElement.insertBefore(div, noVideoEl);
+  }
+
+  function destroyPlayer() {
+    stopDriftCheck();
+    if (player) {
+      try { player.destroy(); } catch (e) { /* already gone */ }
+    }
+    player = null;
+    playerBroken = false;
+  }
+
   function startDriftCheck() {
     stopDriftCheck();
     expected = player.getCurrentTime();
@@ -140,14 +160,17 @@
     const id = lastLoadedId;
     if (!id) return;
     if (e.data === 100 || e.data === 101 || e.data === 150) {
+      playerBroken = true;
       handleEmbedError(id);
     } else {
       setStatus('Nie udało się odtworzyć tego filmu.');
     }
   }
 
+  const MAX_REPLACEMENT_HOPS = 4;
+
   async function handleEmbedError(videoId) {
-    if (attemptedReplacement.has(videoId)) {
+    if (attemptedReplacement.has(videoId) || attemptedReplacement.size >= MAX_REPLACEMENT_HOPS) {
       setStatus('Ten film jest niedostępny do odtworzenia poza YouTube. Wklej inny link.');
       return;
     }
@@ -162,12 +185,13 @@
         setStatus('Ten film jest niedostępny do odtworzenia poza YouTube. Wklej inny link.');
         return;
       }
-      if (!data.candidates || !data.candidates.length) {
+
+      const pick = (data.candidates || []).find((c) => !attemptedReplacement.has(c.videoId));
+      if (!pick) {
         setStatus('Nie znaleziono zamiennika dla tego filmu. Wklej inny link.');
         return;
       }
 
-      const pick = data.candidates[0];
       setStatus(`Ten film jest niedostępny — przełączono na: "${pick.title}" (${pick.channel})`);
       playVideoId(pick.videoId);
     } catch (e) {
@@ -180,7 +204,10 @@
     noVideoEl.classList.add('hidden');
     suppressEvents = true;
 
+    if (playerBroken) destroyPlayer();
+
     if (!player) {
+      ensurePlayerContainer();
       player = new YT.Player('player', {
         videoId: id,
         playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
@@ -200,6 +227,7 @@
     const id = extractVideoId(rawInput);
     if (!id) { setStatus('Nie rozpoznano linku do YouTube.'); return; }
     videoInput.value = '';
+    attemptedReplacement.clear();
     playVideoId(id);
   }
 
@@ -211,7 +239,10 @@
     suppressEvents = true;
     lastLoadedId = state.videoId;
 
+    if (playerBroken) destroyPlayer();
+
     if (!player) {
+      ensurePlayerContainer();
       player = new YT.Player('player', {
         videoId: state.videoId,
         playerVars: { autoplay: state.playing ? 1 : 0, rel: 0, playsinline: 1 },
