@@ -207,15 +207,21 @@
   // emoji rather than actual Twitch emote artwork (Kappa, PogChamp, etc. are
   // Twitch's own copyrighted/trademarked images) — same typing/picker
   // mechanism, generic glyphs instead.
+  // "lul" and "monkas" are deliberately absent — BetterTTV has real versions
+  // of those (loaded below), and a real emote should win over a generic one.
   const EMOTES = {
-    kappa: '😏', kappapride: '🏳️‍🌈', pog: '😮', pogchamp: '🤯', lul: '😂',
-    omegalul: '🤣', monkas: '😰', pepehands: '😢', pepelaugh: '😹', sadge: '😞',
+    kappa: '😏', kappapride: '🏳️‍🌈', pog: '😮', pogchamp: '🤯',
+    omegalul: '🤣', pepehands: '😢', pepelaugh: '😹', sadge: '😞',
     copium: '🥴', based: '😎', cringe: '😬', fire: '🔥', heart: '❤️',
     clap: '👏', thumbsup: '👍', thumbsdown: '👎', eyes: '👀', skull: '💀',
     cry: '😭', think: '🤔', party: '🎉', wave: '👋', gg: '🏆',
     poggers: '🎉', salty: '🧂', peepo: '🐸', chad: '💪', ez: '😴',
   };
   const EMOTE_RE = /:([a-z0-9+]{2,20}):/gi;
+
+  // Real BetterTTV emotes, fetched from /api/emotes (server hotlinks their
+  // public CDN) and merged into the same :code: lookup as the built-in emoji.
+  let imageEmotes = {};
 
   function renderMessageText(container, text) {
     let lastIndex = 0;
@@ -226,8 +232,17 @@
         container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
       }
       const code = match[1].toLowerCase();
+      const img = imageEmotes[code];
       const emoji = EMOTES[code];
-      if (emoji) {
+      if (img) {
+        const imgEl = document.createElement('img');
+        imgEl.className = 'emote-img';
+        imgEl.src = img.url;
+        imgEl.alt = `:${code}:`;
+        imgEl.title = `:${code}:`;
+        imgEl.loading = 'lazy';
+        container.appendChild(imgEl);
+      } else if (emoji) {
         const span = document.createElement('span');
         span.className = 'emote';
         span.title = `:${code}:`;
@@ -243,35 +258,69 @@
     }
   }
 
+  function insertEmoteCode(code) {
+    const insert = `:${code}: `;
+    const start = chatInput.selectionStart ?? chatInput.value.length;
+    const end = chatInput.selectionEnd ?? chatInput.value.length;
+    chatInput.value = chatInput.value.slice(0, start) + insert + chatInput.value.slice(end);
+    chatInput.focus();
+    const pos = start + insert.length;
+    chatInput.setSelectionRange(pos, pos);
+  }
+
+  function addPickerButton(code, glyphEl) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emote-picker-item';
+    btn.title = `:${code}:`;
+
+    const label = document.createElement('span');
+    label.className = 'code';
+    label.textContent = `:${code}:`;
+    btn.appendChild(glyphEl);
+    btn.appendChild(label);
+
+    btn.addEventListener('click', () => insertEmoteCode(code));
+    emotePicker.appendChild(btn);
+  }
+
   function buildEmotePicker() {
     Object.keys(EMOTES).forEach((code) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'emote-picker-item';
-      btn.title = `:${code}:`;
-
       const glyph = document.createElement('span');
       glyph.className = 'glyph';
       glyph.textContent = EMOTES[code];
-      const label = document.createElement('span');
-      label.className = 'code';
-      label.textContent = `:${code}:`;
-      btn.appendChild(glyph);
-      btn.appendChild(label);
-
-      btn.addEventListener('click', () => {
-        const insert = `:${code}: `;
-        const start = chatInput.selectionStart ?? chatInput.value.length;
-        const end = chatInput.selectionEnd ?? chatInput.value.length;
-        chatInput.value = chatInput.value.slice(0, start) + insert + chatInput.value.slice(end);
-        chatInput.focus();
-        const pos = start + insert.length;
-        chatInput.setSelectionRange(pos, pos);
-      });
-      emotePicker.appendChild(btn);
+      addPickerButton(code, glyph);
     });
   }
   buildEmotePicker();
+
+  async function loadBttvEmotes() {
+    try {
+      const res = await fetch('/api/emotes');
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = data.emotes || [];
+      if (!list.length) return;
+
+      const divider = document.createElement('div');
+      divider.className = 'emote-picker-divider';
+      divider.textContent = 'BetterTTV';
+      emotePicker.appendChild(divider);
+
+      list.forEach((e) => {
+        imageEmotes[e.code] = { url: e.url, animated: e.animated };
+        const glyph = document.createElement('img');
+        glyph.className = 'glyph-img';
+        glyph.src = e.url;
+        glyph.alt = e.code;
+        glyph.loading = 'lazy';
+        addPickerButton(e.code, glyph);
+      });
+    } catch (e) {
+      // fine — chat still works with the built-in emoji set
+    }
+  }
+  loadBttvEmotes();
 
   emoteBtn.addEventListener('click', () => {
     emotePicker.classList.toggle('hidden');

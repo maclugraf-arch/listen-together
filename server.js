@@ -156,11 +156,47 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// BetterTTV's global emote list is public and unauthenticated — this hotlinks
+// straight to their CDN (cdn.betterttv.net) rather than copying any emote
+// artwork into this app, the same way any BTTV-aware chat client does.
+const BTTV_CACHE_TTL = 6 * 60 * 60 * 1000;
+const SHORTCODE_RE = /^[a-z0-9+]+$/;
+let bttvCache = null;
+let bttvCachedAt = 0;
+
+async function getBttvEmotes() {
+  if (bttvCache && Date.now() - bttvCachedAt < BTTV_CACHE_TTL) {
+    return bttvCache;
+  }
+  try {
+    const res = await fetch('https://api.betterttv.net/3/cached/emotes/global');
+    if (!res.ok) throw new Error(`bttv status ${res.status}`);
+    const data = await res.json();
+    const emotes = data
+      .filter((e) => SHORTCODE_RE.test(e.code.toLowerCase()))
+      .map((e) => ({
+        code: e.code.toLowerCase(),
+        url: `https://cdn.betterttv.net/emote/${e.id}/2x`,
+        animated: !!e.animated,
+      }));
+    bttvCache = emotes;
+    bttvCachedAt = Date.now();
+  } catch (e) {
+    console.error('BetterTTV fetch failed:', e.message);
+  }
+  return bttvCache || [];
+}
+
+app.get('/api/emotes', async (req, res) => {
+  res.json({ emotes: await getBttvEmotes() });
+});
+
 const httpServer = app.listen(PORT, () => {
   console.log(`Listen-together server running at http://localhost:${PORT}`);
   if (!YT_API_KEY) {
     console.log('YOUTUBE_API_KEY not set — automatic replacement and suggestions are disabled.');
   }
+  getBttvEmotes(); // warm the cache so the first chat user isn't stuck waiting
 });
 
 const io = new Server(httpServer);
