@@ -7,7 +7,6 @@
   --accent: #ff3b3b;
   --accent-hover: #ff5a5a;
   --border: #2a2f3a;
-  --claude-orange: #d97757;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -319,14 +318,6 @@ button.ghost:hover { background: var(--panel-alt); }
 .chat-name {
   font-weight: 600;
   color: var(--accent);
-}
-
-.chat-msg-bot .chat-name {
-  color: var(--claude-orange);
-}
-
-.claude-icon {
-  vertical-align: -2px;
 }
 
 .chat-input-row {
