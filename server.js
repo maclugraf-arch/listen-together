@@ -122,6 +122,7 @@ function getRoom(code) {
       updatedAt: Date.now(),
       queue: [],
       history: [],
+      messages: [],
     });
   }
   return rooms.get(code);
@@ -161,14 +162,35 @@ function fullState(code) {
 io.on('connection', (socket) => {
   let joinedRoom = null;
 
-  socket.on('join-room', (code) => {
-    if (typeof code !== 'string' || !code.trim()) return;
-    code = code.trim().toUpperCase();
+  let displayName = 'Gość';
+
+  socket.on('join-room', (payload) => {
+    const code = payload && typeof payload.code === 'string' ? payload.code.trim().toUpperCase() : null;
+    if (!code) return;
+
+    const rawName = payload && typeof payload.name === 'string' ? payload.name.trim() : '';
+    displayName = rawName ? rawName.slice(0, 24) : `Gość${Math.floor(1000 + Math.random() * 9000)}`;
+
     joinedRoom = code;
     socket.join(code);
 
+    const state = getRoom(code);
     socket.emit('state', fullState(code));
+    socket.emit('chat-history', state.messages);
     io.to(code).emit('members', roomSize(code));
+  });
+
+  socket.on('chat-message', (payload) => {
+    if (!joinedRoom) return;
+    const text = payload && typeof payload.text === 'string' ? payload.text.trim().slice(0, 500) : '';
+    if (!text) return;
+
+    const state = getRoom(joinedRoom);
+    const msg = { name: displayName, text, ts: Date.now() };
+    state.messages.push(msg);
+    state.messages = state.messages.slice(-50);
+
+    io.to(joinedRoom).emit('chat-message', msg);
   });
 
   socket.on('update', (payload) => {

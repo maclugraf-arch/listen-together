@@ -59,8 +59,9 @@ label {
   text-align: left;
   font-size: 13px;
   color: var(--muted);
-  margin-bottom: 6px;
+  margin: 16px 0 6px;
 }
+label:first-of-type { margin-top: 0; }
 
 input[type="text"] {
   width: 100%;
@@ -294,6 +295,44 @@ button.ghost:hover { background: var(--panel-alt); }
   flex: none;
 }
 .thumb-remove:hover { background: var(--accent); }
+
+.chat-messages {
+  height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.chat-msg {
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.chat-input-row input {
+  flex: 1;
+}
+
+.chat-input-row button {
+  flex: none;
+  padding: 12px 22px;
+}
 
 @media (max-width: 600px) {
   .card { padding: 28px 20px; }

@@ -1,6 +1,7 @@
 (() => {
   const joinScreen = document.getElementById('join-screen');
   const roomScreen = document.getElementById('room-screen');
+  const nameInput = document.getElementById('name-input');
   const roomInput = document.getElementById('room-input');
   const joinBtn = document.getElementById('join-btn');
   const createBtn = document.getElementById('create-btn');
@@ -14,8 +15,13 @@
   const queueListEl = document.getElementById('queue-list');
   const historyListEl = document.getElementById('history-list');
   const suggestionsListEl = document.getElementById('suggestions-list');
+  const chatMessagesEl = document.getElementById('chat-messages');
+  const chatInput = document.getElementById('chat-input');
+  const chatSendBtn = document.getElementById('chat-send-btn');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
+
+  try { nameInput.value = localStorage.getItem('lt_name') || ''; } catch (e) { /* no storage access */ }
 
   const socket = io();
 
@@ -114,6 +120,35 @@
     });
   }
 
+  function appendChatMessage(msg) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'chat-name';
+    nameSpan.textContent = msg.name + ': ';
+    const textSpan = document.createElement('span');
+    textSpan.textContent = msg.text;
+    div.appendChild(nameSpan);
+    div.appendChild(textSpan);
+    chatMessagesEl.appendChild(div);
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  }
+
+  function renderChatHistory(messages) {
+    chatMessagesEl.innerHTML = '';
+    (messages || []).forEach(appendChatMessage);
+  }
+
+  function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    socket.emit('chat-message', { text });
+    chatInput.value = '';
+  }
+
+  chatSendBtn.addEventListener('click', sendChat);
+  chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
   async function loadSuggestions(videoId) {
     try {
       const res = await fetch(`/api/related/${videoId}`);
@@ -163,7 +198,10 @@
     roomScreen.classList.remove('hidden');
     roomCodeEl.textContent = code;
 
-    socket.emit('join-room', code);
+    const name = nameInput.value.trim();
+    try { if (name) localStorage.setItem('lt_name', name); } catch (e) { /* no storage access */ }
+
+    socket.emit('join-room', { code, name });
   }
 
   joinBtn.addEventListener('click', () => goToRoom(roomInput.value || randomCode()));
@@ -413,6 +451,9 @@
   });
 
   socket.on('members', (n) => { setMemberText(n); });
+
+  socket.on('chat-history', (messages) => { renderChatHistory(messages); });
+  socket.on('chat-message', (msg) => { appendChatMessage(msg); });
 
   // Auto-join if a room code is already in the URL.
   const params = new URLSearchParams(window.location.search);

@@ -12,6 +12,8 @@
   <div class="card">
     <h1>🎧 Słuchaj razem</h1>
     <p class="subtitle">Otwórz jeden pokój z znajomymi i słuchajcie muzyki z YouTube dokładnie w tym samym momencie.</p>
+    <label for="name-input">Twoja nazwa</label>
+    <input id="name-input" type="text" placeholder="Gość" maxlength="24" autocomplete="off" />
     <label for="room-input">Kod pokoju</label>
     <input id="room-input" type="text" placeholder="np. ABC123" maxlength="12" autocomplete="off" />
     <div class="button-row">
@@ -46,6 +48,15 @@
     </div>
 
     <p id="status" class="status"></p>
+
+    <section class="panel">
+      <h2>Czat</h2>
+      <div id="chat-messages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" type="text" placeholder="Napisz coś..." maxlength="500" autocomplete="off" />
+        <button id="chat-send-btn" class="primary">Wyślij</button>
+      </div>
+    </section>
 
     <section class="panel">
       <div class="panel-header">
