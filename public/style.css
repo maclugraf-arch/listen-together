@@ -534,6 +534,50 @@ button.ghost:hover { background: var(--panel-alt); }
   display: inline-block;
 }
 
+.reaction-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.flying-reaction {
+  position: absolute;
+  bottom: 0;
+  font-size: 34px;
+  animation: floatUp 2.2s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes floatUp {
+  0% { transform: translateY(0) translateX(0); opacity: 1; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-260px) translateX(var(--drift, 0px)); opacity: 0; }
+}
+
+.reaction-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.reaction-bar button {
+  flex: none;
+  font-size: 20px;
+  padding: 8px 14px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+.reaction-bar button:hover {
+  background: var(--panel);
+  transform: translateY(-2px);
+}
+
 @media (max-width: 600px) {
   .card { padding: 28px 20px; }
   .load-row { flex-direction: column; }

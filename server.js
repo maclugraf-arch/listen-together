@@ -377,6 +377,15 @@ io.on('connection', (socket) => {
     postChatMessage(joinedRoom, socket.data.name, text, socket.data.color);
   });
 
+  // Ephemeral — not stored, not replayed to new joiners. Just a live burst
+  // relayed to everyone currently in the room.
+  socket.on('reaction', (payload) => {
+    if (!joinedRoom) return;
+    const emoji = payload && typeof payload.emoji === 'string' ? payload.emoji.slice(0, 8) : '';
+    if (!emoji) return;
+    socket.to(joinedRoom).emit('reaction', { emoji });
+  });
+
   socket.on('update', (payload) => {
     if (!joinedRoom) return;
     const { videoId, title, time, playing } = payload || {};

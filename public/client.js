@@ -37,6 +37,8 @@
   const emotePicker = document.getElementById('emote-picker');
   const emoteSearchInput = document.getElementById('emote-search');
   const emoteSearchResultsEl = document.getElementById('emote-search-results');
+  const reactionBarEl = document.getElementById('reaction-bar');
+  const reactionOverlayEl = document.getElementById('reaction-overlay');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
@@ -58,6 +60,8 @@
   let lastLoadedId = null;
   let playerBroken = false;
   let suggestionsFor = null;
+  let currentRoomCode = null;
+  let wakeLock = null;
   const attemptedReplacement = new Set();
 
   function setStatus(msg) {
@@ -569,9 +573,43 @@
     return null;
   }
 
+  // Requesting the wake lock needs a secure context (https, or localhost) —
+  // it silently no-ops over plain http (e.g. a LAN address), which is fine.
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (e) {
+      // permission denied, unsupported, or an insecure context — fine without it
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentRoomCode) {
+      requestWakeLock();
+    }
+  });
+
+  function joinRoomNow() {
+    if (!currentRoomCode) return;
+    const name = nameInput.value.trim();
+    socket.emit('join-room', { code: currentRoomCode, name, color: myColor });
+  }
+
+  // socket.io reconnects the transport on its own after a drop, but it
+  // doesn't remember room membership — the server only knows a socket is
+  // "in" a room for as long as that specific connection lasts. Re-sending
+  // join-room on every 'connect' (including reconnects) keeps a phone that
+  // briefly loses wifi from silently falling out of sync with no way back
+  // short of a manual refresh.
+  socket.on('connect', () => {
+    if (currentRoomCode) joinRoomNow();
+  });
+
   function goToRoom(code) {
     code = code.trim().toUpperCase();
     if (!code) return;
+    currentRoomCode = code;
     const url = new URL(window.location.href);
     url.searchParams.set('room', code);
     window.history.replaceState({}, '', url);
@@ -583,7 +621,8 @@
     const name = nameInput.value.trim();
     try { if (name) localStorage.setItem('lt_name', name); } catch (e) { /* no storage access */ }
 
-    socket.emit('join-room', { code, name, color: myColor });
+    joinRoomNow();
+    requestWakeLock();
   }
 
   joinBtn.addEventListener('click', () => goToRoom(roomInput.value || randomCode()));
@@ -646,9 +685,14 @@
     setStatus(title ? `Dodano do kolejki: "${title}"` : 'Dodano do kolejki.');
   }
 
+  function updatePageTitle(title) {
+    document.title = title ? `🎧 ${title}` : '🎧 Słuchaj razem';
+  }
+
   function broadcastState(playing) {
     if (!player || typeof player.getVideoData !== 'function') return;
     const data = player.getVideoData();
+    updatePageTitle(data.title);
     socket.emit('update', {
       videoId: data.video_id,
       title: data.title,
@@ -802,9 +846,11 @@
       suggestionsFor = null;
       renderSuggestions([]);
       noVideoEl.classList.remove('hidden');
+      updatePageTitle(null);
       return;
     }
     noVideoEl.classList.add('hidden');
+    updatePageTitle(state.title);
 
     suppressEvents = true;
     lastLoadedId = state.videoId;
@@ -862,6 +908,34 @@
 
   socket.on('chat-history', (messages) => { renderChatHistory(messages); });
   socket.on('chat-message', (msg) => { appendChatMessage(msg); });
+
+  // --- Flying reactions: ephemeral, not part of chat history ---
+
+  const REACTIONS = ['🔥', '❤️', '😂', '😮', '👏', '💀', '🎉', '👀'];
+
+  function spawnReaction(emoji) {
+    const el = document.createElement('div');
+    el.className = 'flying-reaction';
+    el.textContent = emoji;
+    el.style.left = `${10 + Math.random() * 80}%`;
+    el.style.setProperty('--drift', `${Math.round(Math.random() * 60 - 30)}px`);
+    el.addEventListener('animationend', () => el.remove());
+    reactionOverlayEl.appendChild(el);
+  }
+
+  REACTIONS.forEach((emoji) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = emoji;
+    btn.title = 'Wyślij reakcję';
+    btn.addEventListener('click', () => {
+      spawnReaction(emoji);
+      socket.emit('reaction', { emoji });
+    });
+    reactionBarEl.appendChild(btn);
+  });
+
+  socket.on('reaction', ({ emoji }) => spawnReaction(emoji));
 
   // Auto-join if a room code is already in the URL.
   const params = new URLSearchParams(window.location.search);
