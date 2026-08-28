@@ -30,6 +30,7 @@
       <span class="room-label">Pokój</span>
       <span id="room-code" class="room-code"></span>
       <button id="copy-link" title="Skopiuj link do pokoju">Skopiuj link</button>
+      <button id="qr-btn" class="ghost" title="Pokaż kod QR">📱 QR</button>
     </div>
     <div class="members" id="member-text">1 osoba w pokoju</div>
   </header>
@@ -60,8 +61,10 @@
         <button id="color-btn" class="ghost">🎨 Kolor nicku</button>
       </div>
       <div id="chat-messages" class="chat-messages"></div>
+      <div id="emote-picker" class="emote-picker hidden"></div>
       <div class="chat-input-row">
-        <input id="chat-input" type="text" placeholder="Napisz coś..." maxlength="500" autocomplete="off" />
+        <button id="emote-btn" class="ghost" type="button" title="Emotki">😊</button>
+        <input id="chat-input" type="text" placeholder="Napisz coś... (np. :fire:)" maxlength="500" autocomplete="off" />
         <button id="chat-send-btn" class="primary">Wyślij</button>
       </div>
     </section>
@@ -97,6 +100,17 @@
     <div class="button-row">
       <button id="color-cancel-btn" class="secondary">Anuluj</button>
       <button id="color-save-btn" class="primary">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<div id="qr-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h3>Zeskanuj, aby dołączyć</h3>
+    <img id="qr-image" class="qr-image" alt="Kod QR do pokoju" width="220" height="220" />
+    <p id="qr-url-text" class="qr-url"></p>
+    <div class="button-row">
+      <button id="qr-close-btn" class="primary">Zamknij</button>
     </div>
   </div>
 </div>

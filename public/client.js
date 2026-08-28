@@ -28,6 +28,13 @@
   const colorCancelBtn = document.getElementById('color-cancel-btn');
   const memberChipsEl = document.getElementById('member-chips');
   const searchResultsEl = document.getElementById('search-results');
+  const qrBtn = document.getElementById('qr-btn');
+  const qrModal = document.getElementById('qr-modal');
+  const qrImage = document.getElementById('qr-image');
+  const qrUrlText = document.getElementById('qr-url-text');
+  const qrCloseBtn = document.getElementById('qr-close-btn');
+  const emoteBtn = document.getElementById('emote-btn');
+  const emotePicker = document.getElementById('emote-picker');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
@@ -196,6 +203,80 @@
     }
   }
 
+  // Twitch/Discord-style :shortcode: emotes. These render as plain Unicode
+  // emoji rather than actual Twitch emote artwork (Kappa, PogChamp, etc. are
+  // Twitch's own copyrighted/trademarked images) — same typing/picker
+  // mechanism, generic glyphs instead.
+  const EMOTES = {
+    kappa: '😏', kappapride: '🏳️‍🌈', pog: '😮', pogchamp: '🤯', lul: '😂',
+    omegalul: '🤣', monkas: '😰', pepehands: '😢', pepelaugh: '😹', sadge: '😞',
+    copium: '🥴', based: '😎', cringe: '😬', fire: '🔥', heart: '❤️',
+    clap: '👏', thumbsup: '👍', thumbsdown: '👎', eyes: '👀', skull: '💀',
+    cry: '😭', think: '🤔', party: '🎉', wave: '👋', gg: '🏆',
+    poggers: '🎉', salty: '🧂', peepo: '🐸', chad: '💪', ez: '😴',
+  };
+  const EMOTE_RE = /:([a-z0-9+]{2,20}):/gi;
+
+  function renderMessageText(container, text) {
+    let lastIndex = 0;
+    let match;
+    EMOTE_RE.lastIndex = 0;
+    while ((match = EMOTE_RE.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      const code = match[1].toLowerCase();
+      const emoji = EMOTES[code];
+      if (emoji) {
+        const span = document.createElement('span');
+        span.className = 'emote';
+        span.title = `:${code}:`;
+        span.textContent = emoji;
+        container.appendChild(span);
+      } else {
+        container.appendChild(document.createTextNode(match[0]));
+      }
+      lastIndex = EMOTE_RE.lastIndex;
+    }
+    if (lastIndex < text.length) {
+      container.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+  }
+
+  function buildEmotePicker() {
+    Object.keys(EMOTES).forEach((code) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'emote-picker-item';
+      btn.title = `:${code}:`;
+
+      const glyph = document.createElement('span');
+      glyph.className = 'glyph';
+      glyph.textContent = EMOTES[code];
+      const label = document.createElement('span');
+      label.className = 'code';
+      label.textContent = `:${code}:`;
+      btn.appendChild(glyph);
+      btn.appendChild(label);
+
+      btn.addEventListener('click', () => {
+        const insert = `:${code}: `;
+        const start = chatInput.selectionStart ?? chatInput.value.length;
+        const end = chatInput.selectionEnd ?? chatInput.value.length;
+        chatInput.value = chatInput.value.slice(0, start) + insert + chatInput.value.slice(end);
+        chatInput.focus();
+        const pos = start + insert.length;
+        chatInput.setSelectionRange(pos, pos);
+      });
+      emotePicker.appendChild(btn);
+    });
+  }
+  buildEmotePicker();
+
+  emoteBtn.addEventListener('click', () => {
+    emotePicker.classList.toggle('hidden');
+  });
+
   function appendChatMessage(msg) {
     const div = document.createElement('div');
     div.className = 'chat-msg';
@@ -204,7 +285,7 @@
     nameSpan.style.color = msg.color || DEFAULT_NAME_COLOR;
     nameSpan.textContent = msg.name + ': ';
     const textSpan = document.createElement('span');
-    textSpan.textContent = msg.text;
+    renderMessageText(textSpan, msg.text);
     div.appendChild(nameSpan);
     div.appendChild(textSpan);
     chatMessagesEl.appendChild(div);
@@ -441,6 +522,15 @@
   leaveBtn.addEventListener('click', () => {
     window.location.href = window.location.origin + window.location.pathname;
   });
+
+  qrBtn.addEventListener('click', () => {
+    const url = window.location.href;
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(url)}`;
+    qrUrlText.textContent = url;
+    qrModal.classList.remove('hidden');
+  });
+  qrCloseBtn.addEventListener('click', () => qrModal.classList.add('hidden'));
+  qrModal.addEventListener('click', (e) => { if (e.target === qrModal) qrModal.classList.add('hidden'); });
 
   loadBtn.addEventListener('click', () => loadVideoLocal(videoInput.value));
   videoInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadVideoLocal(videoInput.value); });
