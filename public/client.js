@@ -120,12 +120,15 @@
     });
   }
 
+  const CLAUDE_ICON_SVG = '<svg class="claude-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 0l1.8 8.4L22 6l-6.2 6L22 18l-8.2-2.4L12 24l-1.8-8.4L2 18l6.2-6L2 6l8.2 2.4z"/></svg>';
+
   function appendChatMessage(msg) {
     const div = document.createElement('div');
-    div.className = 'chat-msg';
+    div.className = msg.bot ? 'chat-msg chat-msg-bot' : 'chat-msg';
     const nameSpan = document.createElement('span');
     nameSpan.className = 'chat-name';
-    nameSpan.textContent = msg.name + ': ';
+    if (msg.bot) nameSpan.innerHTML = CLAUDE_ICON_SVG;
+    nameSpan.appendChild(document.createTextNode((msg.bot ? ' ' : '') + msg.name + ': '));
     const textSpan = document.createElement('span');
     textSpan.textContent = msg.text;
     div.appendChild(nameSpan);

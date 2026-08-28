@@ -163,9 +163,9 @@ function fullState(code) {
   };
 }
 
-function postChatMessage(code, name, text) {
+function postChatMessage(code, name, text, isBot) {
   const state = getRoom(code);
-  const msg = { name, text, ts: Date.now() };
+  const msg = { name, text, ts: Date.now(), bot: !!isBot };
   state.messages.push(msg);
   state.messages = state.messages.slice(-50);
   io.to(code).emit('chat-message', msg);
@@ -175,7 +175,7 @@ function postChatMessage(code, name, text) {
 // live web search so questions about current events/prices get fresh data.
 async function askClaude(code, question) {
   if (!anthropic) {
-    postChatMessage(code, '🤖 Claude', 'Integracja z Claude nie jest skonfigurowana na tym serwerze (brak ANTHROPIC_API_KEY).');
+    postChatMessage(code, 'Claude', 'Integracja z Claude nie jest skonfigurowana na tym serwerze (brak ANTHROPIC_API_KEY).', true);
     return;
   }
   try {
@@ -197,10 +197,10 @@ async function askClaude(code, question) {
       .join('\n\n')
       .trim()
       .slice(0, 1500) || 'Nie udało się uzyskać odpowiedzi.';
-    postChatMessage(code, '🤖 Claude', answer);
+    postChatMessage(code, 'Claude', answer, true);
   } catch (e) {
     console.error('Claude chat error:', e);
-    postChatMessage(code, '🤖 Claude', 'Wystąpił błąd przy pytaniu do Claude. Spróbuj ponownie.');
+    postChatMessage(code, 'Claude', 'Wystąpił błąd przy pytaniu do Claude. Spróbuj ponownie.', true);
   }
 }
 
