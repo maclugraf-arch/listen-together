@@ -7,6 +7,7 @@
   const createBtn = document.getElementById('create-btn');
   const roomCodeEl = document.getElementById('room-code');
   const copyLinkBtn = document.getElementById('copy-link');
+  const leaveBtn = document.getElementById('leave-btn');
   const memberTextEl = document.getElementById('member-text');
   const videoInput = document.getElementById('video-input');
   const loadBtn = document.getElementById('load-btn');
@@ -218,6 +219,14 @@
     } catch (e) {
       setStatus(window.location.href);
     }
+  });
+
+  // A full navigation back to the base URL is simpler and safer than trying
+  // to manually unwind every piece of in-room state (player, drift timer,
+  // suppressed-events flags, socket room membership) — it always leaves a
+  // clean slate.
+  leaveBtn.addEventListener('click', () => {
+    window.location.href = window.location.origin + window.location.pathname;
   });
 
   loadBtn.addEventListener('click', () => loadVideoLocal(videoInput.value));
