@@ -151,6 +151,28 @@ button.secondary:hover { background: #262b35; }
   font-size: 14px;
 }
 
+.member-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.member-chips:empty {
+  display: none;
+}
+
+.member-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--panel-alt);
+  border: 1px solid currentColor;
+}
+
 .main {
   max-width: 900px;
   margin: 0 auto;
@@ -238,6 +260,10 @@ button.ghost:hover { background: var(--panel-alt); }
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+#search-results:not(:empty) {
+  margin-top: 12px;
 }
 
 .empty-hint {

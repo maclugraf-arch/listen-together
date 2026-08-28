@@ -99,6 +99,63 @@ app.get('/api/related/:videoId', async (req, res) => {
   }
 });
 
+// Free-text YouTube search (as opposed to /api/related, which searches by
+// an existing video's title). Filters to embeddable results for the same
+// reason: no point surfacing a result that won't actually play.
+app.get('/api/search', async (req, res) => {
+  if (!YT_API_KEY) {
+    return res.status(501).json({ error: 'no_api_key' });
+  }
+
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : '';
+  if (!q) {
+    return res.json({ results: [] });
+  }
+
+  try {
+    const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
+    searchUrl.searchParams.set('key', YT_API_KEY);
+    searchUrl.searchParams.set('part', 'snippet');
+    searchUrl.searchParams.set('type', 'video');
+    searchUrl.searchParams.set('maxResults', '10');
+    searchUrl.searchParams.set('q', q);
+
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) {
+      return res.status(502).json({ error: 'search_failed' });
+    }
+    const searchData = await searchRes.json();
+    const ids = (searchData.items || []).map((it) => it.id && it.id.videoId).filter(Boolean);
+
+    if (!ids.length) {
+      return res.json({ results: [] });
+    }
+
+    const statusUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
+    statusUrl.searchParams.set('key', YT_API_KEY);
+    statusUrl.searchParams.set('part', 'status,snippet');
+    statusUrl.searchParams.set('id', ids.join(','));
+
+    const statusRes = await fetch(statusUrl);
+    if (!statusRes.ok) {
+      return res.status(502).json({ error: 'status_check_failed' });
+    }
+    const statusData = await statusRes.json();
+
+    const results = (statusData.items || [])
+      .filter((it) => it.status && it.status.embeddable)
+      .map((it) => ({
+        videoId: it.id,
+        title: it.snippet.title,
+        channel: it.snippet.channelTitle,
+      }));
+
+    res.json({ results });
+  } catch (e) {
+    res.status(500).json({ error: 'search_failed' });
+  }
+});
+
 const httpServer = app.listen(PORT, () => {
   console.log(`Listen-together server running at http://localhost:${PORT}`);
   if (!YT_API_KEY) {
@@ -139,6 +196,20 @@ function roomSize(code) {
   return room ? room.size : 0;
 }
 
+function roomMembers(code) {
+  const room = io.sockets.adapter.rooms.get(code);
+  if (!room) return [];
+  return Array.from(room)
+    .map((id) => io.sockets.sockets.get(id))
+    .filter(Boolean)
+    .map((s) => ({ name: s.data.name || 'Gość', color: s.data.color || DEFAULT_NAME_COLOR }));
+}
+
+function broadcastMembers(code) {
+  io.to(code).emit('members', roomSize(code));
+  io.to(code).emit('members-list', roomMembers(code));
+}
+
 function pushHistory(state, videoId, title) {
   if (!videoId) return;
   state.history = state.history.filter((h) => h.videoId !== videoId);
@@ -173,18 +244,18 @@ function postChatMessage(code, name, text, color) {
 io.on('connection', (socket) => {
   let joinedRoom = null;
 
-  let displayName = 'Gość';
-  let displayColor = DEFAULT_NAME_COLOR;
+  socket.data.name = 'Gość';
+  socket.data.color = DEFAULT_NAME_COLOR;
 
   socket.on('join-room', (payload) => {
     const code = payload && typeof payload.code === 'string' ? payload.code.trim().toUpperCase() : null;
     if (!code) return;
 
     const rawName = payload && typeof payload.name === 'string' ? payload.name.trim() : '';
-    displayName = rawName ? rawName.slice(0, 24) : `Gość${Math.floor(1000 + Math.random() * 9000)}`;
+    socket.data.name = rawName ? rawName.slice(0, 24) : `Gość${Math.floor(1000 + Math.random() * 9000)}`;
 
     const rawColor = payload && typeof payload.color === 'string' ? payload.color.trim() : '';
-    displayColor = HEX_COLOR_RE.test(rawColor) ? rawColor : DEFAULT_NAME_COLOR;
+    socket.data.color = HEX_COLOR_RE.test(rawColor) ? rawColor : DEFAULT_NAME_COLOR;
 
     joinedRoom = code;
     socket.join(code);
@@ -192,12 +263,14 @@ io.on('connection', (socket) => {
     const state = getRoom(code);
     socket.emit('state', fullState(code));
     socket.emit('chat-history', state.messages);
-    io.to(code).emit('members', roomSize(code));
+    broadcastMembers(code);
   });
 
   socket.on('set-color', (payload) => {
     const color = payload && typeof payload.color === 'string' ? payload.color.trim() : '';
-    if (HEX_COLOR_RE.test(color)) displayColor = color;
+    if (!HEX_COLOR_RE.test(color)) return;
+    socket.data.color = color;
+    if (joinedRoom) broadcastMembers(joinedRoom);
   });
 
   socket.on('chat-message', (payload) => {
@@ -205,7 +278,7 @@ io.on('connection', (socket) => {
     const text = payload && typeof payload.text === 'string' ? payload.text.trim().slice(0, 500) : '';
     if (!text) return;
 
-    postChatMessage(joinedRoom, displayName, text, displayColor);
+    postChatMessage(joinedRoom, socket.data.name, text, socket.data.color);
   });
 
   socket.on('update', (payload) => {
@@ -286,7 +359,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (joinedRoom) {
-      setImmediate(() => io.to(joinedRoom).emit('members', roomSize(joinedRoom)));
+      setImmediate(() => broadcastMembers(joinedRoom));
     }
   });
 });

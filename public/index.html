@@ -34,6 +34,8 @@
     <div class="members" id="member-text">1 osoba w pokoju</div>
   </header>
 
+  <div id="member-chips" class="member-chips"></div>
+
   <main class="main">
     <div class="video-wrap">
       <div id="player"></div>
@@ -43,10 +45,12 @@
     </div>
 
     <div class="load-row">
-      <input id="video-input" type="text" placeholder="Wklej link do YouTube (lub sam ID filmu)" autocomplete="off" />
+      <input id="video-input" type="text" placeholder="Wklej link YouTube albo szukaj po tytule..." autocomplete="off" />
       <button id="queue-add-btn" class="secondary">Dodaj do kolejki</button>
       <button id="load-btn" class="primary">Odtwórz</button>
     </div>
+
+    <div id="search-results" class="thumb-list"></div>
 
     <p id="status" class="status"></p>
 

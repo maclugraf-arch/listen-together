@@ -26,6 +26,8 @@
   const colorPreviewName = document.getElementById('color-preview-name');
   const colorSaveBtn = document.getElementById('color-save-btn');
   const colorCancelBtn = document.getElementById('color-cancel-btn');
+  const memberChipsEl = document.getElementById('member-chips');
+  const searchResultsEl = document.getElementById('search-results');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
@@ -59,6 +61,17 @@
     if (n === 1) word = 'osoba';
     else if (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) word = 'osoby';
     memberTextEl.textContent = `${n} ${word} w pokoju`;
+  }
+
+  function renderMemberChips(list) {
+    memberChipsEl.innerHTML = '';
+    list.forEach((m) => {
+      const span = document.createElement('span');
+      span.className = 'member-chip';
+      span.style.color = m.color || DEFAULT_NAME_COLOR;
+      span.textContent = m.name;
+      memberChipsEl.appendChild(span);
+    });
   }
 
   function escapeHtml(s) {
@@ -131,6 +144,56 @@
       });
       suggestionsListEl.appendChild(div);
     });
+  }
+
+  // mode: 'play' plays the clicked result immediately (like the "Odtwórz"
+  // button), 'queue' adds it to the queue instead (like "Dodaj do kolejki").
+  function renderSearchResults(results, mode) {
+    searchResultsEl.innerHTML = '';
+    results.forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'thumb-item clickable';
+      div.title = mode === 'play' ? 'Odtwórz teraz' : 'Dodaj do kolejki';
+      div.innerHTML = `
+        <img src="${thumbUrl(item.videoId)}" alt="">
+        <span class="thumb-title">${escapeHtml(item.title)}</span>
+      `;
+      div.addEventListener('click', () => {
+        if (mode === 'play') {
+          attemptedReplacement.clear();
+          playVideoId(item.videoId);
+        } else {
+          socket.emit('queue-add', { videoId: item.videoId, title: item.title });
+          setStatus(`Dodano do kolejki: "${item.title}"`);
+        }
+        searchResultsEl.innerHTML = '';
+        videoInput.value = '';
+      });
+      searchResultsEl.appendChild(div);
+    });
+  }
+
+  async function performSearch(query, mode) {
+    const q = query.trim();
+    if (!q) { setStatus('Wklej link do YouTube albo wpisz czego szukać.'); return; }
+    setStatus('Szukam…');
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!res.ok || data.error === 'no_api_key') {
+        setStatus('Wyszukiwanie niedostępne (brak klucza YouTube API na serwerze).');
+        return;
+      }
+      if (!data.results || !data.results.length) {
+        setStatus('Nic nie znaleziono. Spróbuj innych słów.');
+        renderSearchResults([], mode);
+        return;
+      }
+      setStatus('');
+      renderSearchResults(data.results, mode);
+    } catch (e) {
+      setStatus('Nie udało się wyszukać.');
+    }
   }
 
   function appendChatMessage(msg) {
@@ -391,8 +454,12 @@
 
   async function addToQueue(rawInput) {
     const id = extractVideoId(rawInput);
-    if (!id) { setStatus('Nie rozpoznano linku do YouTube.'); return; }
+    if (!id) {
+      performSearch(rawInput, 'queue');
+      return;
+    }
     videoInput.value = '';
+    searchResultsEl.innerHTML = '';
     setStatus('Dodawanie do kolejki…');
     let title = null;
     try {
@@ -542,8 +609,12 @@
 
   function loadVideoLocal(rawInput) {
     const id = extractVideoId(rawInput);
-    if (!id) { setStatus('Nie rozpoznano linku do YouTube.'); return; }
+    if (!id) {
+      performSearch(rawInput, 'play');
+      return;
+    }
     videoInput.value = '';
+    searchResultsEl.innerHTML = '';
     attemptedReplacement.clear();
     playVideoId(id);
   }
@@ -613,6 +684,7 @@
   });
 
   socket.on('members', (n) => { setMemberText(n); });
+  socket.on('members-list', (list) => { renderMemberChips(list || []); });
 
   socket.on('chat-history', (messages) => { renderChatHistory(messages); });
   socket.on('chat-message', (msg) => { appendChatMessage(msg); });
