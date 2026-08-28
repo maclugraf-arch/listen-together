@@ -1,10 +1,14 @@
 const path = require('path');
 const express = require('express');
 const { Server } = require('socket.io');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const PORT = process.env.PORT || 3000;
 const YT_API_KEY = process.env.YOUTUBE_API_KEY;
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+const CLAUDE_COMMAND_RE = /^\/claude\s+(.+)/is;
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
@@ -159,6 +163,42 @@ function fullState(code) {
   };
 }
 
+function postChatMessage(code, name, text) {
+  const state = getRoom(code);
+  const msg = { name, text, ts: Date.now() };
+  state.messages.push(msg);
+  state.messages = state.messages.slice(-50);
+  io.to(code).emit('chat-message', msg);
+}
+
+// Answers a "/claude <question>" chat command with a real Claude reply, using
+// live web search so questions about current events/prices get fresh data.
+async function askClaude(code, question) {
+  if (!anthropic) {
+    postChatMessage(code, '🤖 Claude', 'Integracja z Claude nie jest skonfigurowana na tym serwerze (brak ANTHROPIC_API_KEY).');
+    return;
+  }
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-5',
+      max_tokens: 1024,
+      system: 'Odpowiadasz na czacie pokoju, w którym znajomi razem słuchają muzyki na YouTube. Odpowiadaj krótko i konkretnie (max kilka zdań), po polsku, jak w czacie. Jeśli pytanie dotyczy czegoś aktualnego (ceny, wydarzenia, dane), skorzystaj z wyszukiwania w sieci.',
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
+      output_config: { effort: 'low' },
+      messages: [{ role: 'user', content: question }],
+    });
+
+    const textBlock = response.content.find((b) => b.type === 'text');
+    const answer = textBlock && textBlock.text.trim()
+      ? textBlock.text.trim().slice(0, 1500)
+      : 'Nie udało się uzyskać odpowiedzi.';
+    postChatMessage(code, '🤖 Claude', answer);
+  } catch (e) {
+    console.error('Claude chat error:', e);
+    postChatMessage(code, '🤖 Claude', 'Wystąpił błąd przy pytaniu do Claude. Spróbuj ponownie.');
+  }
+}
+
 io.on('connection', (socket) => {
   let joinedRoom = null;
 
@@ -185,12 +225,12 @@ io.on('connection', (socket) => {
     const text = payload && typeof payload.text === 'string' ? payload.text.trim().slice(0, 500) : '';
     if (!text) return;
 
-    const state = getRoom(joinedRoom);
-    const msg = { name: displayName, text, ts: Date.now() };
-    state.messages.push(msg);
-    state.messages = state.messages.slice(-50);
+    postChatMessage(joinedRoom, displayName, text);
 
-    io.to(joinedRoom).emit('chat-message', msg);
+    const claudeMatch = text.match(CLAUDE_COMMAND_RE);
+    if (claudeMatch) {
+      askClaude(joinedRoom, claudeMatch[1].trim());
+    }
   });
 
   socket.on('update', (payload) => {
