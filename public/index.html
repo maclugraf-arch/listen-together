@@ -38,50 +38,58 @@
   <div id="member-chips" class="member-chips"></div>
 
   <main class="main">
-    <div class="video-wrap">
-      <div id="player"></div>
-      <div id="no-video" class="no-video">
-        <p>Wklej link do filmu na YouTube poniżej, aby zacząć.</p>
+    <div class="room-columns">
+      <aside class="queue-column">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Kolejka</h2>
+            <button id="skip-btn" class="ghost hidden">Pomiń ⏭</button>
+          </div>
+          <div id="queue-list" class="thumb-list vertical-list"></div>
+        </section>
+      </aside>
+
+      <div class="video-column">
+        <div class="video-wrap">
+          <div id="player"></div>
+          <div id="no-video" class="no-video">
+            <p>Wklej link do filmu na YouTube poniżej, aby zacząć.</p>
+          </div>
+          <div id="reaction-overlay" class="reaction-overlay"></div>
+        </div>
+
+        <div id="reaction-bar" class="reaction-bar"></div>
+
+        <div class="load-row">
+          <input id="video-input" type="text" placeholder="Wklej link YouTube albo szukaj po tytule..." autocomplete="off" />
+          <button id="queue-add-btn" class="secondary">Dodaj do kolejki</button>
+          <button id="load-btn" class="primary">Odtwórz</button>
+        </div>
+
+        <div id="search-results" class="thumb-list"></div>
+
+        <p id="status" class="status"></p>
       </div>
-      <div id="reaction-overlay" class="reaction-overlay"></div>
+
+      <aside class="chat-column">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Czat</h2>
+            <button id="color-btn" class="ghost">🎨 Kolor nicku</button>
+          </div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div id="emote-picker" class="emote-picker hidden">
+            <input id="emote-search" type="text" class="emote-search hidden" placeholder="Szukaj w emotkach kanału..." autocomplete="off" />
+            <div id="emote-search-results" class="emote-search-results"></div>
+          </div>
+          <div class="chat-input-row">
+            <button id="emote-btn" class="ghost" type="button" title="Emotki">😊</button>
+            <input id="chat-input" type="text" placeholder="Napisz coś... (np. :fire:)" maxlength="500" autocomplete="off" />
+            <button id="chat-send-btn" class="primary">Wyślij</button>
+          </div>
+        </section>
+      </aside>
     </div>
-
-    <div id="reaction-bar" class="reaction-bar"></div>
-
-    <div class="load-row">
-      <input id="video-input" type="text" placeholder="Wklej link YouTube albo szukaj po tytule..." autocomplete="off" />
-      <button id="queue-add-btn" class="secondary">Dodaj do kolejki</button>
-      <button id="load-btn" class="primary">Odtwórz</button>
-    </div>
-
-    <div id="search-results" class="thumb-list"></div>
-
-    <p id="status" class="status"></p>
-
-    <section class="panel">
-      <div class="panel-header">
-        <h2>Czat</h2>
-        <button id="color-btn" class="ghost">🎨 Kolor nicku</button>
-      </div>
-      <div id="chat-messages" class="chat-messages"></div>
-      <div id="emote-picker" class="emote-picker hidden">
-        <input id="emote-search" type="text" class="emote-search hidden" placeholder="Szukaj w emotkach kanału..." autocomplete="off" />
-        <div id="emote-search-results" class="emote-search-results"></div>
-      </div>
-      <div class="chat-input-row">
-        <button id="emote-btn" class="ghost" type="button" title="Emotki">😊</button>
-        <input id="chat-input" type="text" placeholder="Napisz coś... (np. :fire:)" maxlength="500" autocomplete="off" />
-        <button id="chat-send-btn" class="primary">Wyślij</button>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <h2>Kolejka</h2>
-        <button id="skip-btn" class="ghost hidden">Pomiń ⏭</button>
-      </div>
-      <div id="queue-list" class="thumb-list"></div>
-    </section>
 
     <section class="panel">
       <h2>Ostatnio odtwarzane</h2>
