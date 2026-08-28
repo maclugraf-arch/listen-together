@@ -4,38 +4,62 @@ const { Server } = require('socket.io');
 
 const PORT = process.env.PORT || 3000;
 const YT_API_KEY = process.env.YOUTUBE_API_KEY;
+const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Finds an embeddable replacement for a video whose owner disabled embedding,
-// using the official YouTube Data API (search + status.embeddable check) —
-// no scraping, no bypassing restrictions, just discovery of an alternate upload.
-app.get('/api/replacement/:videoId', async (req, res) => {
+async function fetchOEmbedTitle(videoId) {
+  const res = await fetch(
+    `https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/watch?v=' + videoId)}&format=json`
+  );
+  if (!res.ok) return null;
+  const info = await res.json();
+  return info.title || null;
+}
+
+// Looks up an embeddable title for a bare link before it's ever been played,
+// so the queue can show a real title + thumbnail instead of just an ID.
+app.get('/api/meta/:videoId', async (req, res) => {
+  const videoId = req.params.videoId;
+  if (!VIDEO_ID_RE.test(videoId)) {
+    return res.status(400).json({ error: 'bad_video_id' });
+  }
+  try {
+    const title = await fetchOEmbedTitle(videoId);
+    if (!title) return res.status(404).json({ error: 'not_found' });
+    res.json({ title });
+  } catch (e) {
+    res.status(500).json({ error: 'lookup_failed' });
+  }
+});
+
+// Finds other embeddable uploads of the same title via the official YouTube
+// Data API (search + status.embeddable check) — used both to recover from a
+// video whose owner disabled embedding, and to show "up next" suggestions.
+// No scraping, no bypassing restrictions, just discovery of alternate uploads.
+app.get('/api/related/:videoId', async (req, res) => {
   if (!YT_API_KEY) {
     return res.status(501).json({ error: 'no_api_key' });
   }
 
   const videoId = req.params.videoId;
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+  if (!VIDEO_ID_RE.test(videoId)) {
     return res.status(400).json({ error: 'bad_video_id' });
   }
 
   try {
-    const oembedRes = await fetch(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/watch?v=' + videoId)}&format=json`
-    );
-    if (!oembedRes.ok) {
+    const title = await fetchOEmbedTitle(videoId);
+    if (!title) {
       return res.status(404).json({ error: 'not_found' });
     }
-    const info = await oembedRes.json();
 
     const searchUrl = new URL('https://www.googleapis.com/youtube/v3/search');
     searchUrl.searchParams.set('key', YT_API_KEY);
     searchUrl.searchParams.set('part', 'snippet');
     searchUrl.searchParams.set('type', 'video');
     searchUrl.searchParams.set('maxResults', '8');
-    searchUrl.searchParams.set('q', info.title);
+    searchUrl.searchParams.set('q', title);
 
     const searchRes = await fetch(searchUrl);
     if (!searchRes.ok) {
@@ -47,7 +71,7 @@ app.get('/api/replacement/:videoId', async (req, res) => {
       .filter((id) => id && id !== videoId);
 
     if (!candidateIds.length) {
-      return res.json({ originalTitle: info.title, candidates: [] });
+      return res.json({ originalTitle: title, candidates: [] });
     }
 
     const statusUrl = new URL('https://www.googleapis.com/youtube/v3/videos');
@@ -69,7 +93,7 @@ app.get('/api/replacement/:videoId', async (req, res) => {
         channel: it.snippet.channelTitle,
       }));
 
-    res.json({ originalTitle: info.title, candidates });
+    res.json({ originalTitle: title, candidates });
   } catch (e) {
     res.status(500).json({ error: 'search_failed' });
   }
@@ -78,24 +102,26 @@ app.get('/api/replacement/:videoId', async (req, res) => {
 const httpServer = app.listen(PORT, () => {
   console.log(`Listen-together server running at http://localhost:${PORT}`);
   if (!YT_API_KEY) {
-    console.log('YOUTUBE_API_KEY not set — automatic replacement for blocked videos is disabled.');
+    console.log('YOUTUBE_API_KEY not set — automatic replacement and suggestions are disabled.');
   }
 });
 
 const io = new Server(httpServer);
 
 // In-memory room state. Fine for a small, single-process app.
-// rooms: Map<roomCode, { videoId, time, playing, updatedAt, title }>
+// rooms: Map<roomCode, { videoId, title, time, playing, updatedAt, queue, history }>
 const rooms = new Map();
 
 function getRoom(code) {
   if (!rooms.has(code)) {
     rooms.set(code, {
       videoId: null,
+      title: null,
       time: 0,
       playing: false,
       updatedAt: Date.now(),
-      title: null,
+      queue: [],
+      history: [],
     });
   }
   return rooms.get(code);
@@ -112,6 +138,26 @@ function roomSize(code) {
   return room ? room.size : 0;
 }
 
+function pushHistory(state, videoId, title) {
+  if (!videoId) return;
+  state.history = state.history.filter((h) => h.videoId !== videoId);
+  state.history.unshift({ videoId, title: title || null });
+  state.history = state.history.slice(0, 10);
+}
+
+function fullState(code) {
+  const state = getRoom(code);
+  return {
+    videoId: state.videoId,
+    title: state.title,
+    time: currentTime(state),
+    playing: state.playing,
+    members: roomSize(code),
+    queue: state.queue,
+    history: state.history,
+  };
+}
+
 io.on('connection', (socket) => {
   let joinedRoom = null;
 
@@ -121,15 +167,7 @@ io.on('connection', (socket) => {
     joinedRoom = code;
     socket.join(code);
 
-    const state = getRoom(code);
-    socket.emit('state', {
-      videoId: state.videoId,
-      title: state.title,
-      time: currentTime(state),
-      playing: state.playing,
-      members: roomSize(code),
-    });
-
+    socket.emit('state', fullState(code));
     io.to(code).emit('members', roomSize(code));
   });
 
@@ -139,19 +177,74 @@ io.on('connection', (socket) => {
     if (typeof time !== 'number' || typeof playing !== 'boolean') return;
 
     const state = getRoom(joinedRoom);
-    if (typeof videoId === 'string') state.videoId = videoId;
-    if (typeof title === 'string') state.title = title;
+    if (typeof videoId === 'string' && videoId !== state.videoId) {
+      pushHistory(state, state.videoId, state.title);
+      state.videoId = videoId;
+      state.title = typeof title === 'string' ? title : null;
+    } else if (typeof title === 'string') {
+      state.title = title;
+    }
     state.time = time;
     state.playing = playing;
     state.updatedAt = Date.now();
 
-    socket.to(joinedRoom).emit('state', {
-      videoId: state.videoId,
-      title: state.title,
-      time: currentTime(state),
-      playing: state.playing,
-      members: roomSize(joinedRoom),
-    });
+    socket.to(joinedRoom).emit('state', fullState(joinedRoom));
+  });
+
+  socket.on('queue-add', (payload) => {
+    if (!joinedRoom) return;
+    const { videoId, title } = payload || {};
+    if (typeof videoId !== 'string' || !VIDEO_ID_RE.test(videoId)) return;
+
+    const state = getRoom(joinedRoom);
+    if (!state.videoId) {
+      state.videoId = videoId;
+      state.title = title || null;
+      state.time = 0;
+      state.playing = true;
+      state.updatedAt = Date.now();
+    } else {
+      state.queue.push({ videoId, title: title || null });
+      state.queue = state.queue.slice(0, 25);
+    }
+
+    io.to(joinedRoom).emit('state', fullState(joinedRoom));
+  });
+
+  socket.on('queue-remove', (payload) => {
+    if (!joinedRoom) return;
+    const index = payload && payload.index;
+    const state = getRoom(joinedRoom);
+    if (typeof index !== 'number' || index < 0 || index >= state.queue.length) return;
+
+    state.queue.splice(index, 1);
+    io.to(joinedRoom).emit('state', fullState(joinedRoom));
+  });
+
+  // Advances to the next queued video. Guarded by the caller's belief of the
+  // current videoId so that if several clients detect "ended" or click skip
+  // around the same time, only the first one actually advances the queue.
+  socket.on('queue-next', (payload) => {
+    if (!joinedRoom) return;
+    const state = getRoom(joinedRoom);
+    if (!payload || payload.videoId !== state.videoId) return;
+
+    pushHistory(state, state.videoId, state.title);
+    const next = state.queue.shift();
+    if (next) {
+      state.videoId = next.videoId;
+      state.title = next.title;
+      state.time = 0;
+      state.playing = true;
+    } else {
+      state.videoId = null;
+      state.title = null;
+      state.time = 0;
+      state.playing = false;
+    }
+    state.updatedAt = Date.now();
+
+    io.to(joinedRoom).emit('state', fullState(joinedRoom));
   });
 
   socket.on('disconnect', () => {

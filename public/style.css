@@ -205,6 +205,96 @@ button.secondary:hover { background: #262b35; }
   margin-top: 10px;
 }
 
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 14px;
+  font-size: 13px;
+  flex: none;
+}
+button.ghost:hover { background: var(--panel-alt); }
+
+.panel {
+  margin-top: 22px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.panel h2 {
+  font-size: 15px;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.thumb-list {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.empty-hint {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.thumb-item {
+  flex: none;
+  width: 140px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.thumb-item.clickable {
+  cursor: pointer;
+}
+.thumb-item.clickable:hover {
+  border-color: var(--accent);
+}
+
+.thumb-item img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: var(--panel-alt);
+}
+
+.thumb-title {
+  display: block;
+  font-size: 12px;
+  padding: 6px 8px;
+  line-height: 1.3;
+  max-height: 2.6em;
+  overflow: hidden;
+}
+
+.thumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+.thumb-remove:hover { background: var(--accent); }
+
 @media (max-width: 600px) {
   .card { padding: 28px 20px; }
   .load-row { flex-direction: column; }

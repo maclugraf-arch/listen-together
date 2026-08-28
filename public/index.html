@@ -41,10 +41,29 @@
 
     <div class="load-row">
       <input id="video-input" type="text" placeholder="Wklej link do YouTube (lub sam ID filmu)" autocomplete="off" />
+      <button id="queue-add-btn" class="secondary">Dodaj do kolejki</button>
       <button id="load-btn" class="primary">Odtwórz</button>
     </div>
 
     <p id="status" class="status"></p>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Kolejka</h2>
+        <button id="skip-btn" class="ghost hidden">Pomiń ⏭</button>
+      </div>
+      <div id="queue-list" class="thumb-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Ostatnio odtwarzane</h2>
+      <div id="history-list" class="thumb-list"></div>
+    </section>
+
+    <section class="panel" id="suggestions-panel">
+      <h2>Proponowane kolejne</h2>
+      <div id="suggestions-list" class="thumb-list"></div>
+    </section>
   </main>
 </div>
 

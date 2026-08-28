@@ -9,6 +9,11 @@
   const memberTextEl = document.getElementById('member-text');
   const videoInput = document.getElementById('video-input');
   const loadBtn = document.getElementById('load-btn');
+  const queueAddBtn = document.getElementById('queue-add-btn');
+  const skipBtn = document.getElementById('skip-btn');
+  const queueListEl = document.getElementById('queue-list');
+  const historyListEl = document.getElementById('history-list');
+  const suggestionsListEl = document.getElementById('suggestions-list');
   const noVideoEl = document.getElementById('no-video');
   const statusEl = document.getElementById('status');
 
@@ -22,6 +27,7 @@
   let expected = 0;
   let lastLoadedId = null;
   let playerBroken = false;
+  let suggestionsFor = null;
   const attemptedReplacement = new Set();
 
   function setStatus(msg) {
@@ -34,6 +40,89 @@
     if (n === 1) word = 'osoba';
     else if (n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14)) word = 'osoby';
     memberTextEl.textContent = `${n} ${word} w pokoju`;
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function thumbUrl(id) {
+    return `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+  }
+
+  function renderQueue(queue) {
+    skipBtn.classList.toggle('hidden', queue.length === 0);
+    queueListEl.innerHTML = '';
+    if (!queue.length) {
+      queueListEl.innerHTML = '<p class="empty-hint">Kolejka jest pusta.</p>';
+      return;
+    }
+    queue.forEach((item, index) => {
+      const div = document.createElement('div');
+      div.className = 'thumb-item';
+      div.innerHTML = `
+        <img src="${thumbUrl(item.videoId)}" alt="">
+        <span class="thumb-title">${escapeHtml(item.title || item.videoId)}</span>
+        <button class="thumb-remove" title="Usuń z kolejki">✕</button>
+      `;
+      div.querySelector('.thumb-remove').addEventListener('click', () => {
+        socket.emit('queue-remove', { index });
+      });
+      queueListEl.appendChild(div);
+    });
+  }
+
+  function renderHistory(history) {
+    historyListEl.innerHTML = '';
+    if (!history.length) {
+      historyListEl.innerHTML = '<p class="empty-hint">Brak historii — jeszcze nic tu nie leciało.</p>';
+      return;
+    }
+    history.forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'thumb-item clickable';
+      div.title = 'Odtwórz ponownie';
+      div.innerHTML = `
+        <img src="${thumbUrl(item.videoId)}" alt="">
+        <span class="thumb-title">${escapeHtml(item.title || item.videoId)}</span>
+      `;
+      div.addEventListener('click', () => {
+        attemptedReplacement.clear();
+        playVideoId(item.videoId);
+      });
+      historyListEl.appendChild(div);
+    });
+  }
+
+  function renderSuggestions(list) {
+    suggestionsListEl.innerHTML = '';
+    list.forEach((item) => {
+      const div = document.createElement('div');
+      div.className = 'thumb-item clickable';
+      div.title = 'Dodaj do kolejki';
+      div.innerHTML = `
+        <img src="${thumbUrl(item.videoId)}" alt="">
+        <span class="thumb-title">${escapeHtml(item.title)}</span>
+      `;
+      div.addEventListener('click', () => {
+        socket.emit('queue-add', { videoId: item.videoId, title: item.title });
+        setStatus(`Dodano do kolejki: "${item.title}"`);
+      });
+      suggestionsListEl.appendChild(div);
+    });
+  }
+
+  async function loadSuggestions(videoId) {
+    try {
+      const res = await fetch(`/api/related/${videoId}`);
+      if (!res.ok) { renderSuggestions([]); return; }
+      const data = await res.json();
+      renderSuggestions((data.candidates || []).slice(0, 6));
+    } catch (e) {
+      renderSuggestions([]);
+    }
   }
 
   function randomCode() {
@@ -93,6 +182,29 @@
   loadBtn.addEventListener('click', () => loadVideoLocal(videoInput.value));
   videoInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadVideoLocal(videoInput.value); });
 
+  queueAddBtn.addEventListener('click', () => addToQueue(videoInput.value));
+
+  skipBtn.addEventListener('click', () => {
+    if (!lastLoadedId) return;
+    socket.emit('queue-next', { videoId: lastLoadedId });
+  });
+
+  async function addToQueue(rawInput) {
+    const id = extractVideoId(rawInput);
+    if (!id) { setStatus('Nie rozpoznano linku do YouTube.'); return; }
+    videoInput.value = '';
+    setStatus('Dodawanie do kolejki…');
+    let title = null;
+    try {
+      const res = await fetch(`/api/meta/${id}`);
+      if (res.ok) title = (await res.json()).title;
+    } catch (e) {
+      // fine without a title — thumbnail alone still identifies it
+    }
+    socket.emit('queue-add', { videoId: id, title });
+    setStatus(title ? `Dodano do kolejki: "${title}"` : 'Dodano do kolejki.');
+  }
+
   function broadcastState(playing) {
     if (!player || typeof player.getVideoData !== 'function') return;
     const data = player.getVideoData();
@@ -147,11 +259,16 @@
     if (e.data === YT.PlayerState.PLAYING) {
       broadcastState(true);
       startDriftCheck();
+      if (suggestionsFor !== lastLoadedId) {
+        suggestionsFor = lastLoadedId;
+        loadSuggestions(lastLoadedId);
+      }
     } else if (e.data === YT.PlayerState.PAUSED) {
       broadcastState(false);
       stopDriftCheck();
     } else if (e.data === YT.PlayerState.ENDED) {
       stopDriftCheck();
+      socket.emit('queue-next', { videoId: lastLoadedId });
     }
   }
 
@@ -178,7 +295,7 @@
     setStatus('Ten film ma wyłączone odtwarzanie poza YouTube — szukam zamiennika…');
 
     try {
-      const res = await fetch(`/api/replacement/${videoId}`);
+      const res = await fetch(`/api/related/${videoId}`);
       const data = await res.json();
 
       if (!res.ok || data.error === 'no_api_key') {
@@ -233,7 +350,15 @@
 
   function applyRemoteState(state) {
     if (!ytReady) { pendingState = state; return; }
-    if (!state.videoId) return;
+
+    if (!state.videoId) {
+      destroyPlayer();
+      lastLoadedId = null;
+      suggestionsFor = null;
+      renderSuggestions([]);
+      noVideoEl.classList.remove('hidden');
+      return;
+    }
     noVideoEl.classList.add('hidden');
 
     suppressEvents = true;
@@ -283,6 +408,8 @@
   socket.on('state', (state) => {
     setMemberText(state.members ?? 1);
     applyRemoteState(state);
+    renderQueue(state.queue || []);
+    renderHistory(state.history || []);
   });
 
   socket.on('members', (n) => { setMemberText(n); });
