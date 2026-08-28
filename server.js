@@ -181,17 +181,22 @@ async function askClaude(code, question) {
   try {
     const response = await anthropic.messages.create({
       model: 'claude-opus-5',
-      max_tokens: 1024,
+      max_tokens: 1536,
       system: 'Odpowiadasz na czacie pokoju, w którym znajomi razem słuchają muzyki na YouTube. Odpowiadaj krótko i konkretnie (max kilka zdań), po polsku, jak w czacie. Jeśli pytanie dotyczy czegoś aktualnego (ceny, wydarzenia, dane), skorzystaj z wyszukiwania w sieci.',
       tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
       output_config: { effort: 'low' },
       messages: [{ role: 'user', content: question }],
     });
 
-    const textBlock = response.content.find((b) => b.type === 'text');
-    const answer = textBlock && textBlock.text.trim()
-      ? textBlock.text.trim().slice(0, 1500)
-      : 'Nie udało się uzyskać odpowiedzi.';
+    // Text can arrive as multiple blocks interleaved with web_search_tool_result
+    // blocks (text before the search, then the synthesized answer after it) —
+    // join them all rather than taking just the first block.
+    const answer = response.content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n\n')
+      .trim()
+      .slice(0, 1500) || 'Nie udało się uzyskać odpowiedzi.';
     postChatMessage(code, '🤖 Claude', answer);
   } catch (e) {
     console.error('Claude chat error:', e);
